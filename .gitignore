@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+/.vs/**
+**/*.log
+**.pdb
+**.tlog
+**.vs/*
+**/.vs/**
+**/*.ilk
+**/*.idb
+**/*.txt
+**/*.filters
+**/*.user
+**/*.obj
+**/*.iobj
+**/*.ipdb
