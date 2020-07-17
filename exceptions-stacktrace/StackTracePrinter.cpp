@@ -9,7 +9,6 @@ using namespace backward;
 
 namespace ExceptionsStacktrace
 {
-	std::mutex g_stackTracePrinter;
 
 	void printStacktrace()
 	{
@@ -24,7 +23,6 @@ namespace ExceptionsStacktrace
 	{
 		StackTrace st;
 		st.load_from(addresses);
-		std::scoped_lock<std::mutex> scoped_lock(g_stackTracePrinter);
 		TraceResolver tr;
 		tr.load_stacktrace(st);
 		std::cout << "stacktrace is" << std::endl;

@@ -350,6 +350,8 @@ typedef SSIZE_T ssize_t;
 
 #endif
 
+static inline std::mutex g_backwardMutex;
+
 #if BACKWARD_HAS_UNWIND == 1
 
 #include <unwind.h>
@@ -892,34 +894,80 @@ namespace backward {
             _stacktrace = addr;
         }
 
+    public:
+        // We have to load the machine type from the image info
+        // So we first initialize the resolver, and it tells us this info
+        void set_machine_type(DWORD machine_type) { machine_type_ = machine_type; }
+        void set_context(CONTEXT* ctx) { ctx_ = ctx; }
+        void set_thread_handle(HANDLE handle) { thd_ = handle; }
+
         NOINLINE
             size_t load_here(size_t depth = 32) {
-            std::vector<void*> addresses(depth);
+            CONTEXT localCtx; // used when no context is provided
 
             if (depth == 0) {
                 return 0;
             }
 
-            auto capteuredAddressesNum = RtlCaptureStackBackTrace(0, static_cast<DWORD>(depth), addresses.data(), nullptr);
-            addresses.resize(std::min(static_cast<std::size_t>(capteuredAddressesNum), depth));
-            _stacktrace = addresses;
-            return size();
-        }
-
-        size_t load_from(void* addr, size_t depth = 32) {
-            load_here(depth + 8);
-
-            for (size_t i = 0; i < _stacktrace.size(); ++i) {
-                if (_stacktrace[i] == addr) {
-                    skip_n_firsts(i);
-                    break;
-                }
+            if (!ctx_) {
+                ctx_ = &localCtx;
+                RtlCaptureContext(ctx_);
             }
 
-            _stacktrace.resize(std::min(_stacktrace.size(), skip_n_firsts() + depth));
+            if (!thd_) {
+                thd_ = GetCurrentThread();
+            }
+
+            HANDLE process = GetCurrentProcess();
+
+            STACKFRAME64 s;
+            memset(&s, 0, sizeof(STACKFRAME64));
+
+            // TODO: 32 bit context capture
+            s.AddrStack.Mode = AddrModeFlat;
+            s.AddrFrame.Mode = AddrModeFlat;
+            s.AddrPC.Mode = AddrModeFlat;
+#ifdef _M_X64
+            s.AddrPC.Offset = ctx_->Rip;
+            s.AddrStack.Offset = ctx_->Rsp;
+            s.AddrFrame.Offset = ctx_->Rbp;
+#else
+            s.AddrPC.Offset = ctx_->Eip;
+            s.AddrStack.Offset = ctx_->Esp;
+            s.AddrFrame.Offset = ctx_->Ebp;
+#endif
+
+            if (!machine_type_) {
+#ifdef _M_X64
+                machine_type_ = IMAGE_FILE_MACHINE_AMD64;
+#else
+                machine_type_ = IMAGE_FILE_MACHINE_I386;
+#endif
+            }
+            std::scoped_lock(g_backwardMutex);
+
+            for (;;) {
+                // NOTE: this only works if PDBs are already loaded!
+                SetLastError(0);
+                if (!StackWalk64(machine_type_, process, thd_, &s, ctx_, NULL,
+                    SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+                    break;
+
+                if (s.AddrReturn.Offset == 0)
+                    break;
+
+                _stacktrace.push_back(reinterpret_cast<void*>(s.AddrPC.Offset));
+
+                if (size() >= depth)
+                    break;
+            }
+
             return size();
         }
     private:
+        DWORD machine_type_ = 0;
+        HANDLE thd_ = 0;
+        CONTEXT* ctx_ = nullptr;
     };
 
 #endif
@@ -3323,6 +3371,7 @@ namespace backward {
         DWORD64 displacement;
 
         std::optional<ResolvedTrace> resolve(ResolvedTrace t) {
+            std::scoped_lock(g_backwardMutex);
             HANDLE process = GetCurrentProcess();
 
             char name[256];

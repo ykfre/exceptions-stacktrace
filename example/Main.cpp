@@ -69,7 +69,7 @@ int main(int argc, char** argv)
 {
 	AutoSymInitialize autoSymInitialize;
 	AutoExceptionStacktraceRegister autoExceptionStacktraceRegister;
-	//test_rethrow();
+	test_rethrow();
 	_set_se_translator(trans_func);
 
 	test_seh();
