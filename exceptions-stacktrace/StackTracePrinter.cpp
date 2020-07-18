@@ -19,7 +19,7 @@ namespace ExceptionsStacktrace
 		clearCollectedExceptionsInfo();
 	}
 
-	void printStacktrace(const std::vector<void*> addresses)
+	void printStacktrace(const std::vector<void*>& addresses)
 	{
 		StackTrace st;
 		st.load_from(addresses);
