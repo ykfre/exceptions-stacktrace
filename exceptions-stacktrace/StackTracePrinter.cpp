@@ -25,21 +25,24 @@ namespace ExceptionsStacktrace
 		st.load_from(addresses);
 		TraceResolver tr;
 		tr.load_stacktrace(st);
-		std::cout << "stacktrace is" << std::endl;
+		std::cout << "stacktrace is:" << std::endl;
 		for (size_t i = 0; i < st.size(); ++i) {
-			auto trace = tr.resolve(st[i]);
-			if (trace.has_value())
+			auto traces = tr.resolve(st[i]);
+			for (const auto& trace : traces)
 			{
-				std::cout << "#" << i
-					<< " " << trace->object_filename
-					<< " " << trace->object_function
-					<< " line: " << trace->source.line
-					<< " [" << trace->addr << "]"
-					<< std::endl;
-			}
-			else
-			{
-				std::cout << "#" << i << " " << st[i].addr << std::endl;
+				if (trace.has_value())
+				{
+					std::cout << "#" << i
+						<< " " << trace->object_filename
+						<< " " << trace->object_function
+						<< " line: " << trace->source.line
+						<< " [" << trace->addr << "]"
+						<< std::endl;
+				}
+				else
+				{
+					std::cout << "#" << i << " " << st[i].addr << std::endl;
+				}
 			}
 		}
 	}

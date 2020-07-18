@@ -956,6 +956,7 @@ namespace backward {
                 if (s.AddrReturn.Offset == 0)
                     break;
 
+                s.AddrPC.Offset--;
                 _stacktrace.push_back(reinterpret_cast<void*>(s.AddrPC.Offset));
 
                 if (size() >= depth)
@@ -3336,13 +3337,12 @@ namespace backward {
     template <> class TraceResolverImpl<system_tag::windows_tag> {
     public:
         TraceResolverImpl() {
-
+            std::lock_guard lock_guard(g_backwardMutex);
             HANDLE process = GetCurrentProcess();
 
             std::vector<module_data> modules;
             DWORD cbNeeded;
             std::vector<HMODULE> module_handles(1);
-            SymInitialize(process, NULL, false);
             DWORD symOptions = SymGetOptions();
             symOptions |= SYMOPT_LOAD_LINES | SYMOPT_UNDNAME;
             SymSetOptions(symOptions);
@@ -3359,6 +3359,7 @@ namespace backward {
         }
 
         template <class ST> void load_stacktrace(ST&) {
+            std::lock_guard lock_guard(g_backwardMutex);
             SymRefreshModuleList(GetCurrentProcess());
         }
 
@@ -3368,25 +3369,68 @@ namespace backward {
             char buffer[max_sym_len];
         } sym;
 
+
         DWORD64 displacement;
 
-        std::optional<ResolvedTrace> resolve(ResolvedTrace t) {
+        std::vector<std::optional<ResolvedTrace>> resolve(ResolvedTrace t) {
             std::scoped_lock(g_backwardMutex);
             HANDLE process = GetCurrentProcess();
-
-            char name[256];
 
             memset(&sym, 0, sizeof sym);
             sym.sym.SizeOfStruct = sizeof(SYMBOL_INFO);
             sym.sym.MaxNameLen = max_sym_len;
+            std::vector<std::optional<ResolvedTrace>> result;
+            DWORD64 addr = (DWORD64)t.addr;
+            // make sure the location of the calling function is reported, and not of the next statement
+            addr--;
+            // number of inlined frames, if any
+            DWORD inlineTrace = SymAddrIncludeInlineTrace(process, addr);
+            if (inlineTrace != 0)
+            {
+                DWORD inlineContext, frameIndex;
+                // the inline context is needed
+                if (SymQueryInlineTrace(process, addr, 0, addr, addr, &inlineContext, &frameIndex))
+                {
+                    for (DWORD i = 0; i < inlineTrace; i++)
+                    {
+                        DWORD64 displacement64 = 0;
+                        // similar to SymFromAddr()
+                        if (SymFromInlineContext(process, addr, inlineContext, &displacement64, &sym.sym))
+                        {
+                            DWORD displacement = 0;
+                            // similar to SymGetLineFromAddr64()
+                            IMAGEHLP_LINE64 line;
+
+                            if (SymGetLineFromInlineContext(process, addr, inlineContext, 0, &displacement, &line))
+                            {
+                                t.object_filename = line.FileName;
+                                t.source.filename = line.FileName;
+                                t.source.line = line.LineNumber;
+                                t.source.col = displacement;
+                            }
+                            char name[500];
+                            UnDecorateSymbolName(sym.sym.Name, (PSTR)name, 500, UNDNAME_COMPLETE);
+                            t.source.function = name;
+                            t.object_filename = "";
+                            t.object_function = name;
+                            result.push_back(t);
+                        }
+
+                        // raise to get inline context of next inlined frame
+                        inlineContext++;
+                    }
+                }
+            }
+            char name[500];
 
             if (!SymFromAddr(process, (ULONG64)t.addr, &displacement, &sym.sym)) {
-                return std::nullopt;
+                result.push_back(std::nullopt);
             }
-            UnDecorateSymbolName(sym.sym.Name, (PSTR)name, 256, UNDNAME_COMPLETE);
+            UnDecorateSymbolName(sym.sym.Name, (PSTR)name, 500, UNDNAME_COMPLETE);
 
             DWORD offset = 0;
             IMAGEHLP_LINE line;
+
             if (SymGetLineFromAddr(process, (ULONG64)t.addr, &offset, &line)) {
                 t.object_filename = line.FileName;
                 t.source.filename = line.FileName;
@@ -3397,8 +3441,8 @@ namespace backward {
             t.source.function = name;
             t.object_filename = "";
             t.object_function = name;
-
-            return t;
+            result.push_back(t);
+            return result;
         }
 
         DWORD machine_type() const { return image_type; }
@@ -3723,23 +3767,6 @@ namespace backward {
             return fp;
         }
 
-        template <typename ST> std::ostream& print(ST& st, std::ostream& os) {
-            Colorize colorize(os);
-            colorize.activate(color_mode);
-            print_stacktrace(st, os, colorize);
-            return os;
-        }
-
-        template <typename IT>
-        FILE* print(IT begin, IT end, FILE* fp = stderr, size_t thread_id = 0) {
-            cfile_streambuf obuf(fp);
-            std::ostream os(&obuf);
-            Colorize colorize(os);
-            colorize.activate(color_mode, fp);
-            print_stacktrace(begin, end, os, thread_id, colorize);
-            return fp;
-        }
-
         template <typename IT>
         std::ostream& print(IT begin, IT end, std::ostream& os,
             size_t thread_id = 0) {
@@ -3755,31 +3782,6 @@ namespace backward {
         TraceResolver _resolver;
         SnippetFactory _snippets;
 
-        template <typename ST>
-        void print_stacktrace(ST& st, std::ostream& os, Colorize& colorize) {
-            print_header(os, st.thread_id());
-            _resolver.load_stacktrace(st);
-            for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
-                auto resolved = _resolver.resolve(st[trace_idx - 1]);
-                if (!resolved.has_value())
-                {
-                    std::cout << "#" << st[trace_idx - 1].addr << std::endl;
-                }
-                else
-                {
-                    print_trace(os, _resolver.resolve(st[trace_idx - 1]).value(), colorize);
-                }
-            }
-        }
-
-        template <typename IT>
-        void print_stacktrace(IT begin, IT end, std::ostream& os, size_t thread_id,
-            Colorize& colorize) {
-            print_header(os, thread_id);
-            for (; begin != end; ++begin) {
-                print_trace(os, *begin, colorize);
-            }
-        }
 
         void print_header(std::ostream& os, size_t thread_id) {
             os << "Stack trace (most recent call last)";
@@ -4009,172 +4011,6 @@ namespace backward {
 
 #ifdef BACKWARD_SYSTEM_WINDOWS
 
-    class SignalHandling {
-    public:
-        SignalHandling(const std::vector<int> & = std::vector<int>())
-            : reporter_thread_([]() {
-            /* We handle crashes in a utility thread:
-              backward structures and some Windows functions called here
-              need stack space, which we do not have when we encounter a
-              stack overflow.
-              To support reporting stack traces during a stack overflow,
-              we create a utility thread at startup, which waits until a
-              crash happens or the program exits normally. */
-
-                {
-                    std::unique_lock<std::mutex> lk(mtx());
-                    cv().wait(lk, [] { return crashed() != crash_status::running; });
-                }
-                if (crashed() == crash_status::crashed) {
-                    handle_stacktrace(skip_recs());
-                }
-                {
-                    std::unique_lock<std::mutex> lk(mtx());
-                    crashed() = crash_status::ending;
-                }
-                cv().notify_one();
-        }) {
-            SetUnhandledExceptionFilter(crash_handler);
-
-            signal(SIGABRT, signal_handler);
-            _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-
-            set_terminate(&terminator);
-            set_unexpected(&terminator);
-            _set_purecall_handler(&terminator);
-            _set_invalid_parameter_handler(&invalid_parameter_handler);
-        }
-        bool loaded() const { return true; }
-
-        ~SignalHandling() {
-            {
-                std::unique_lock<std::mutex> lk(mtx());
-                crashed() = crash_status::normal_exit;
-            }
-
-            cv().notify_one();
-
-            reporter_thread_.join();
-        }
-
-    private:
-        static CONTEXT* ctx() {
-            static CONTEXT data;
-            return &data;
-        }
-
-        enum class crash_status { running, crashed, normal_exit, ending };
-
-        static crash_status& crashed() {
-            static crash_status data;
-            return data;
-        }
-
-        static std::mutex& mtx() {
-            static std::mutex data;
-            return data;
-        }
-
-        static std::condition_variable& cv() {
-            static std::condition_variable data;
-            return data;
-        }
-
-        static HANDLE& thread_handle() {
-            static HANDLE handle;
-            return handle;
-        }
-
-        std::thread reporter_thread_;
-
-        // TODO: how not to hardcode these?
-        static const constexpr int signal_skip_recs =
-#ifdef __clang__
-            // With clang, RtlCaptureContext also captures the stack frame of the
-            // current function Below that, there ar 3 internal Windows functions
-            4
-#else
-            // With MSVC cl, RtlCaptureContext misses the stack frame of the current
-            // function The first entries during StackWalk are the 3 internal Windows
-            // functions
-            3
-#endif
-            ;
-
-        static int& skip_recs() {
-            static int data;
-            return data;
-        }
-
-        static inline void terminator() {
-            crash_handler(signal_skip_recs);
-            abort();
-        }
-
-        static inline void signal_handler(int) {
-            crash_handler(signal_skip_recs);
-            abort();
-        }
-
-        static inline void __cdecl invalid_parameter_handler(const wchar_t*,
-            const wchar_t*,
-            const wchar_t*,
-            unsigned int,
-            uintptr_t) {
-            crash_handler(signal_skip_recs);
-            abort();
-        }
-
-        NOINLINE static LONG WINAPI crash_handler(EXCEPTION_POINTERS* info) {
-            // The exception info supplies a trace from exactly where the issue was,
-            // no need to skip records
-            crash_handler(0, info->ContextRecord);
-            return EXCEPTION_CONTINUE_SEARCH;
-        }
-
-        NOINLINE static void crash_handler(int skip, CONTEXT* ct = nullptr) {
-
-            if (ct == nullptr) {
-                RtlCaptureContext(ctx());
-            }
-            else {
-                memcpy(ctx(), ct, sizeof(CONTEXT));
-            }
-            DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
-                GetCurrentProcess(), &thread_handle(), 0, FALSE,
-                DUPLICATE_SAME_ACCESS);
-
-            skip_recs() = skip;
-
-            {
-                std::unique_lock<std::mutex> lk(mtx());
-                crashed() = crash_status::crashed;
-            }
-
-            cv().notify_one();
-
-            {
-                std::unique_lock<std::mutex> lk(mtx());
-                cv().wait(lk, [] { return crashed() != crash_status::crashed; });
-            }
-        }
-
-        static void handle_stacktrace(int skip_frames = 0) {
-            // printer creates the TraceResolver, which can supply us a machine type
-            // for stack walking. Without this, StackTrace can only guess using some
-            // macros.
-            // StackTrace also requires that the PDBs are already loaded, which is done
-            // in the constructor of TraceResolver
-            Printer printer;
-
-            StackTrace st;
-            st.load_here(32 + skip_frames);
-            st.skip_n_firsts(skip_frames);
-
-            printer.address = true;
-            printer.print(st, std::cerr);
-        }
-    };
 
 #endif // BACKWARD_SYSTEM_WINDOWS
 
