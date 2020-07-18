@@ -47,6 +47,7 @@ int f()
 	{
 		throw MyException();
 	}
+	d.at(2);
 	return 0;
 }
 ```
@@ -143,7 +144,7 @@ For more examples please view Main.cpp under example dir.
 
 ## Testing
 
-Was done with MSVC 2019 and Clang 2019
+Was done with MSVC 2019 and Clang 10
 
 ## Contributing
 
