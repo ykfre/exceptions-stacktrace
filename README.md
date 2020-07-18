@@ -94,24 +94,38 @@ int main()
 }
 ```
 
-Result:
-
 stacktrace is:
+
 #0  backward::StackTraceImpl<backward::system_tag::windows_tag>::load_here line: 914 [00007FF6E7BC2357]
+
 #1  ExceptionsStacktrace::AutoExceptionStacktraceRegister::addStackTraceToException line: 42 [00007FF6E7BC274A]
+
 #2  RtlIsGenericTableEmpty line: 0 [00007FF9567785B5]
+
 #3  RtlRaiseException line: 0 [00007FF95676A055]
+
 #4  RtlRaiseException line: 0 [00007FF956769FC2]
+
 #5  RaiseException line: 0 [00007FF953A3A798]
+
 #6  CxxThrowException line: 0 [00007FF9409A620F]
+
 #7  std::_Xout_of_range line: 0 [00007FF936D49DE1]
+
 #8  std::vector<int,std::allocator<int> >::_Xrange line: 1710 [00007FF6E7BC11F0]
+	
 #9  std::vector<int,std::allocator<int> >::at line: 1522 [00007FF6E7BC10F4]
+	
 #9  f line: 10 [00007FF6E7BC10F4]
+
 #10  g line: 18 [00007FF6E7BC1108]
+
 #11  main line: 30 [00007FF6E7BC1146]
+
 #12  invoke_main line: 78 [00007FF6E7BC5E37]
+
 #12  __scrt_common_main_seh line: 288 [00007FF6E7BC5E37]
+
 #13  BaseThreadInitThunk line: 0 [00007FF9547C7BD3]
 
 
