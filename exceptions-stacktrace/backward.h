@@ -944,7 +944,7 @@ namespace backward {
                 machine_type_ = IMAGE_FILE_MACHINE_I386;
 #endif
             }
-            std::scoped_lock(g_backwardMutex);
+            std::scoped_lock lock(g_backwardMutex);
 
             for (;;) {
                 // NOTE: this only works if PDBs are already loaded!
@@ -3373,7 +3373,7 @@ namespace backward {
         DWORD64 displacement;
 
         std::vector<std::optional<ResolvedTrace>> resolve(ResolvedTrace t) {
-            std::scoped_lock(g_backwardMutex);
+            std::scoped_lock lock(g_backwardMutex);
             HANDLE process = GetCurrentProcess();
 
             memset(&sym, 0, sizeof sym);
