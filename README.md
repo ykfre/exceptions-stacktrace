@@ -47,12 +47,14 @@ int f()
 	{
 		throw MyException();
 	}
+	return 0;
 }
 ```
 
 or something like that, you may even wrapped the external code usage with a small wrapper (in this example the external code is std::vector), just to get a stacktrace, or a meaningful error message.
 
 **but you don't need it anymore!!!**
+
 You can just use this library.
 
 ## **Usage**
