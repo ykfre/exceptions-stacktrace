@@ -67,6 +67,8 @@ void trans_func(unsigned int u, EXCEPTION_POINTERS*)
 #pragma optimize( "", on )
 int main(int argc, char** argv)
 {
+	// The order is important - you first need to call AutoSymInitialize and than  AutoExceptionStacktraceRegister
+	// in order to prevent endless recursion if something in initialization failed.
 	AutoSymInitialize autoSymInitialize;
 	AutoExceptionStacktraceRegister autoExceptionStacktraceRegister;
 

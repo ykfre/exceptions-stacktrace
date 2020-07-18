@@ -10,6 +10,7 @@ namespace ExceptionsStacktrace
 {
 	AutoSymInitialize::AutoSymInitialize()
 	{
+		throwIfFalse(!s_is_already_initialized, "Symbols initializer already initialized");
 		auto current_process_handle = GetCurrentProcess();
 		std::wstring symbolPathSize;
 		symbolPathSize.resize(4096);
@@ -20,6 +21,7 @@ namespace ExceptionsStacktrace
 			std::filesystem::path(getExePath()).parent_path().c_str();
 		throwIfFalse(SymSetSearchPathW(current_process_handle, symbolPathSize.data()),
 			"Failed to set search symbol path");
+		s_is_already_initialized = true;
 	}
 
 	AutoSymInitialize::~AutoSymInitialize()
