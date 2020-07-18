@@ -15,8 +15,8 @@ namespace ExceptionsStacktrace
 		~AutoExceptionStacktraceRegister();
 		AutoExceptionStacktraceRegister(const AutoExceptionStacktraceRegister&) = delete;
 		AutoExceptionStacktraceRegister& operator=(const AutoExceptionStacktraceRegister&) = delete;
-		AutoExceptionStacktraceRegister(AutoExceptionStacktraceRegister&& other) noexcept;
-		AutoExceptionStacktraceRegister& operator=(AutoExceptionStacktraceRegister&& other) noexcept;
+		AutoExceptionStacktraceRegister(AutoExceptionStacktraceRegister&& other) noexcept = delete;
+		AutoExceptionStacktraceRegister& operator=(AutoExceptionStacktraceRegister&& other) noexcept = delete;
 
 	private:
 		static LONG WINAPI addStackTraceToException(struct _EXCEPTION_POINTERS* ExceptionInfo);

@@ -57,21 +57,6 @@ namespace ExceptionsStacktrace
 		throwIfFalse(m_registeredHandler, "failed to add veh handler");
 	}
 
-	AutoExceptionStacktraceRegister::AutoExceptionStacktraceRegister(AutoExceptionStacktraceRegister&& other) noexcept
-	{
-		std::swap(m_registeredHandler, other.m_registeredHandler);
-	}
-
-	AutoExceptionStacktraceRegister& AutoExceptionStacktraceRegister::operator=(AutoExceptionStacktraceRegister&& other) noexcept
-	{
-		if (this != &other)
-		{
-			m_registeredHandler = other.m_registeredHandler;
-			other.m_registeredHandler = nullptr;
-		}
-		return *this;
-	}
-
 	AutoExceptionStacktraceRegister::~AutoExceptionStacktraceRegister()
 	{
 		if (m_registeredHandler)
