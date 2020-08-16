@@ -7,7 +7,9 @@
 #include "AutoSymInitialize.h"
 #include "AutoExceptionStacktraceRegister.h"
 #include "StackTracePrinter.h"
+#include "Globals.h"
 #include <iostream>
+
 using namespace ExceptionsStacktrace;
 
 extern int g;
@@ -56,6 +58,9 @@ void test_seh()
 	catch (...)
 	{
 		printStacktrace();
+		// This function is needed for clearing the collected stacktrace
+		// and should always be called after printing the stacktrace. 
+		clearCollectedExceptionInfo();
 	}
 }
 

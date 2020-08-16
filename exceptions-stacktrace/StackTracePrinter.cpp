@@ -9,30 +9,21 @@ using namespace backward;
 
 namespace ExceptionsStacktrace
 {
-
-	void printStacktrace()
-	{
-		for (const auto& stacktrace : t_currentExceptionStacktraces)
-		{
-			printStacktrace(stacktrace);
-		}
-		clearCollectedExceptionsInfo();
-	}
-
-	void printStacktrace(const std::vector<void*>& addresses)
+	std::string getStacktraceAsString(const std::vector<void*>& addresses)
 	{
 		StackTrace st;
 		st.load_from(addresses);
 		TraceResolver tr;
+		std::stringstream ss;
 		tr.load_stacktrace(st);
-		std::cout << "stacktrace is:" << std::endl;
+		ss << "stacktrace is:" << std::endl;
 		for (size_t i = 0; i < st.size(); ++i) {
 			auto traces = tr.resolve(st[i]);
 			for (const auto& trace : traces)
 			{
 				if (trace.has_value())
 				{
-					std::cout << "#" << i
+					ss << "#" << i
 						<< " " << trace->object_filename
 						<< " " << trace->object_function
 						<< " line: " << trace->source.line
@@ -41,9 +32,27 @@ namespace ExceptionsStacktrace
 				}
 				else
 				{
-					std::cout << "#" << i << " " << st[i].addr << std::endl;
+					ss << "#" << i << " " << st[i].addr << std::endl;
 				}
 			}
 		}
+		return ss.str();
 	}
+
+	std::string getStacktraceAsString()
+	{
+		std::string stacktraceString;
+		for (const auto& stacktrace : t_currentExceptionStacktraces)
+		{
+			stacktraceString += getStacktraceAsString(stacktrace);
+		}
+		return stacktraceString;
+	}
+
+	void printStacktrace()
+	{
+		std::cerr << getStacktraceAsString();
+	}
+
+	
 }

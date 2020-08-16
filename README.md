@@ -25,7 +25,7 @@ int main()
 	}
 	catch(const std::exception& e)
 	{
-		std::cout << std::string(e.what());
+		std::cerr << std::string(e.what());
 	}
 }
 ```
@@ -83,6 +83,9 @@ void g()
 	catch(const std::exception& e)
 	{
 		printStacktrace();
+		// This function is needed for clearing the collected stacktrace
+		// and should always be called after printing the stacktrace. 
+		clearCollectedExceptionsInfo();
 	}
 }
 
